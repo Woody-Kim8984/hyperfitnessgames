@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>하이브리드 워치 타이머</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Noto+Sans+KR:wght@500;700&display=swap">
+<style>
+/* Layout: one square watch face (100vmin) — segment ring on the bezel, time in the middle, one big tap target at the bottom. Single dark OLED look. */
+:root{
+  --bg:#000; --ink:#f3f5f8; --muted:#8b93a1; --dim:#2a2f38;
+  --accent:#ff6a3d; --accent-ink:#1a0b05; --warn:#ff4d4d;
+  --z1:#6f9dff; --z2:#3fcc9f; --z3:#ee6fc4;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Noto Sans KR",system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;user-select:none;-webkit-user-select:none;
+  display:flex;align-items:center;justify-content:center;
+  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px))}
+.face{position:relative;width:100vmin;height:100vmin;max-width:100%;max-height:100%;flex:none}
+.ring{position:absolute;inset:0;width:100%;height:100%}
+.num{font-family:var(--display);font-variant-numeric:tabular-nums}
+.view{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:13vmin 13vmin 9vmin}
+.view[hidden]{display:none!important}
+
+.zone{font-family:var(--display);font-weight:700;font-size:5.4vmin;letter-spacing:.12em;color:var(--zc)}
+.seg{font-weight:700;font-size:6.6vmin;line-height:1.15;margin-top:.3vmin;max-width:64vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-wrap:balance}
+.spec{font-size:4.4vmin;color:var(--muted);background:none;padding:0;line-height:1.4}
+.spec:disabled{cursor:default}
+.spec.sw{background:#1b1f26;color:var(--ink);border-radius:5vmin;padding:.6vmin 3.5vmin;margin-top:.6vmin;font-weight:700}
+.spec.sw::after{content:" ⇄";color:var(--zc)}
+.segt{font-size:21vmin;font-weight:700;line-height:.9;margin-top:1vmin}
+.segt.paused{opacity:.4}
+.mid{display:flex;align-items:center;justify-content:center;gap:2.5vmin;margin-top:.5vmin}
+.tot{font-size:7vmin;font-weight:600;color:var(--muted);white-space:nowrap}
+.tot b{color:var(--ink);font-weight:600}
+.dots{display:flex;gap:1.3vmin;margin-top:1.2vmin}
+.dots i{width:2.6vmin;height:2.6vmin;border-radius:50%;background:var(--dim)}
+.dots i.on{background:var(--zc)}
+.dots[hidden]{display:none}
+
+button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulation}
+button:focus-visible{outline:.8vmin solid var(--ink);outline-offset:.6vmin}
+.icon{width:10vmin;height:10vmin;border-radius:50%;background:#15181e;color:var(--muted);font-size:5.5vmin;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.icon.armed{background:var(--warn);color:#000}
+.big{position:absolute;left:50%;bottom:6vmin;transform:translateX(-50%);width:62vmin;height:21vmin;border-radius:11vmin;
+  background:var(--zc,var(--accent));color:#000;font-family:var(--display);font-weight:800;font-size:9.5vmin;letter-spacing:.03em;line-height:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6vmin}
+.big small{font-family:var(--body);font-size:4.2vmin;font-weight:700;opacity:.75;letter-spacing:0;max-width:52vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big:active{filter:brightness(.8)}
+.big.cool{filter:brightness(.55)}
+.big.armed{background:var(--warn)!important;color:#000!important}
+.runview{justify-content:flex-start;padding-top:11vmin;padding-bottom:30vmin}
+.doneview{justify-content:flex-start;padding-top:14vmin}
+
+/* ready / done */
+.title{font-family:var(--display);font-weight:800;font-size:10vmin;letter-spacing:.04em;line-height:1;white-space:nowrap}
+.sub{font-size:5vmin;color:var(--muted);margin-top:1.5vmin;line-height:1.4}
+.last{margin-top:2vmin;font-size:4.6vmin;color:var(--muted)}
+.mode{margin-top:3vmin;display:flex;flex-direction:column;align-items:center;gap:.8vmin}
+.mode .k{font-size:4vmin;color:var(--muted)}
+.mode .pill{display:flex;align-items:center;gap:2vmin}
+.mode .pill b{color:var(--accent)}
+.last b{font-family:var(--display);font-size:8vmin;color:var(--ink);font-weight:700;margin-left:1.5vmin}
+.fin{font-size:17vmin;font-weight:800;line-height:1;color:var(--accent)}
+.pair{display:flex;gap:5vmin;margin-top:1vmin;font-size:4.2vmin;color:var(--muted)}
+.pair b{display:block;font-family:var(--display);font-size:7vmin;color:var(--ink);font-weight:600}
+.row2{display:flex;gap:3vmin;margin-top:2.5vmin}
+.pill{height:10vmin;padding:0 4.5vmin;border-radius:5vmin;background:#1b1f26;font-size:4.8vmin;font-weight:700}
+.pill.armed{background:var(--warn);color:#000}
+
+/* scroll sheet */
+.sheet{position:absolute;inset:0;background:var(--bg);overflow-y:auto;padding:14vmin 14vmin 18vmin;text-align:left;z-index:3}
+.sheet[hidden]{display:none}
+.sheet h4{margin:0 0 2vmin;text-align:center;font-family:var(--display);font-size:7vmin;letter-spacing:.08em;color:var(--muted)}
+.sr{display:flex;justify-content:space-between;gap:2vmin;padding:2vmin 0;border-bottom:.3vmin solid var(--dim);font-size:4.8vmin}
+.sr .num{font-size:7vmin;font-weight:600}
+.sr .zn{color:var(--zc);font-family:var(--display);font-weight:700;letter-spacing:.08em}
+.qrbox{background:#fff;padding:3vmin;border-radius:3vmin;margin:2vmin auto;width:fit-content}
+.qrbox img,.qrbox canvas{display:block;width:62vmin!important;height:62vmin!important}
+.note{font-size:4.4vmin;color:var(--muted);text-align:center;line-height:1.45}
+.close{display:block;margin:4vmin auto 0}
+</style>
+</head>
+<body>
+
+<div class="face" id="face">
+  <svg class="ring" id="ring" viewBox="0 0 100 100" aria-hidden="true"></svg>
+
+  <section class="view" id="vReady">
+    <div class="title">HYBRID SIM</div>
+    <div class="sub">런 2.4km + 스테이션 8개</div>
+    <div class="mode"><span class="k">런 기록 방식 (눌러서 변경)</span><button class="pill" id="modeBtn"></button></div>
+    <div class="last" id="lastRec"></div>
+  </section>
+
+  <section class="view runview" id="vRun" hidden>
+    <div class="zone" id="zone">ZONE 1</div>
+    <div class="seg" id="seg">800m RUN</div>
+    <button class="spec" id="spec" disabled>10 laps</button>
+    <div class="segt num" id="segt">0:00</div>
+    <div class="mid">
+      <button class="icon" id="undoBtn" aria-label="마지막 기록 취소">↶</button>
+      <span class="tot num" id="tot">Σ <b>0:00</b></span>
+      <button class="icon" id="pauseBtn" aria-label="일시정지">❚❚</button>
+    </div>
+    <div class="dots" id="dots" hidden></div>
+  </section>
+
+  <section class="view doneview" id="vDone" hidden>
+    <div class="zone" style="--zc:var(--accent)">FINISH</div>
+    <div class="fin num" id="fin">0:00</div>
+    <div class="pair"><span>런<b class="num" id="fRun"></b></span><span>스테이션<b class="num" id="fSta"></b></span></div>
+    <div class="row2">
+      <button class="pill" id="detailBtn">구간</button>
+      <button class="pill" id="qrBtn">폰으로</button>
+    </div>
+  </section>
+
+  <button class="big" id="bigBtn">START</button>
+
+  <div class="sheet" id="sheet" hidden></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const SEGS=[
+ {z:1,n:'800m RUN',s:'10 laps',run:true},{z:1,n:'고블릿 스쿼트',s:'16kg · 50 reps'},{z:1,n:'파머스 캐리',s:'16kg × 2 · 200m'},{z:1,n:'스키에르그',s:'1000m'},
+ {z:2,n:'800m RUN',s:'10 laps',run:true},{z:2,n:'워킹 런지',s:'20kg · 100m'},{z:2,n:'로잉',s:'1000m'},
+ {z:3,n:'800m RUN',s:'10 laps',run:true},{z:3,n:'트레드밀 슬레드 푸시',s:'150m'},{z:3,n:'버피 오버 더 라인',s:'50 reps'},{z:3,n:'월볼 (에어볼)',s:'6kg · 100 reps'}];
+const N=SEGS.length, LAPS=10, GUARD=1200;
+const zc=z=>`var(--z${z})`;
+const $=id=>document.getElementById(id);
+const KEY='hyb-watch-state-v1', HKEY='hyb-watch-history-v1';
+const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const fresh=()=>({status:'ready',startAt:0,paused:0,pauseAt:0,ev:[]});
+let MODE=load('hyb-watch-mode','lap'); // 'lap' = 10 laps one by one, 'pass' = whole run in one tap
+let S=load(KEY,null)||fresh(), H=load(HKEY,[]), lastTap=0;
+
+const now=()=>Date.now();
+const splits=()=>S.ev.filter(e=>e.k==='split').map(e=>e.t);
+const segIdx=()=>splits().length;
+const segTimes=()=>{const sp=splits();return sp.map((t,i)=>t-(i?sp[i-1]:0))};
+function lapsOf(i){let s=0,o=[];for(const e of S.ev){if(e.k==='split'){s++;continue}if(s===i)o.push(e.t)}return o}
+function elapsed(){
+  if(S.status==='ready')return 0;
+  if(S.status==='done')return splits().at(-1)||0;
+  return (S.status==='paused'?S.pauseAt:now())-S.startAt-S.paused;
+}
+function fmt(ms,tenths){
+  ms=Math.max(0,ms);const t=Math.floor(ms/100),h=Math.floor(t/36000),m=Math.floor(t/600)%60,s=Math.floor(t/10)%60;
+  const c=h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`;
+  return tenths?`${c}.${t%10}`:c;
+}
+const persist=()=>save(KEY,S);
+function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+
+/* actions */
+const lapOn=()=>(S.mode||'lap')==='lap';
+function start(){S={...fresh(),status:'running',startAt:now(),mode:MODE};persist();wake();buzz(80);render()}
+function resume(){S.paused+=now()-S.pauseAt;S.pauseAt=0;S.status='running'}
+function split(){
+  if(S.status==='paused')resume();
+  S.ev.push({k:'split',t:elapsed()});
+  if(segIdx()>=N){S.status='done';finish();buzz([200,100,200,100,400])}else buzz([120,80,120]);
+  persist();render();
+}
+function lap(){
+  if(S.status==='paused')resume();
+  const i=segIdx();S.ev.push({k:'lap',t:elapsed()});
+  if(lapsOf(i).length>=LAPS){split();return}
+  buzz(60);persist();render();
+}
+function main(){
+  const t=now(); if(t-lastTap<GUARD&&S.status==='running')return; lastTap=t;
+  const b=$('bigBtn'); b.classList.add('cool'); setTimeout(()=>b.classList.remove('cool'),GUARD);
+  if(S.status==='ready')return start();
+  if(S.status==='done')return newRun();
+  SEGS[segIdx()].run&&lapOn()?lap():split();
+}
+function pause(){
+  if(S.status==='running'){S.status='paused';S.pauseAt=now()}else if(S.status==='paused')resume();
+  persist();render();
+}
+const armed={};
+function arm(el,key,fn){
+  if(armed[key]){clearTimeout(armed[key]);delete armed[key];el.classList.remove('armed');fn();return}
+  el.classList.add('armed');armed[key]=setTimeout(()=>{el.classList.remove('armed');delete armed[key]},2500);
+}
+function undo(){arm($('undoBtn'),'undo',()=>{if(S.ev.length){S.ev.pop();persist();buzz(40);render()}})}
+function newRun(){S=fresh();persist();render()}
+function lapDur(i){const L=lapsOf(i);if(!L.length)return null;const st=i?splits()[i-1]:0;return L.map((t,k)=>t-(k?L[k-1]:st))}
+function finish(){
+  S.id=String(now());
+  H.unshift({id:S.id,date:new Date(S.startAt).toISOString(),total:splits().at(-1),segs:segTimes(),laps:SEGS.map((s,i)=>s.run?lapDur(i):null),complete:true});
+  H=H.slice(0,20);save(HKEY,H);
+}
+
+/* wake lock */
+let lock=null;
+async function wake(){try{if('wakeLock'in navigator&&!lock){lock=await navigator.wakeLock.request('screen');lock.addEventListener('release',()=>lock=null)}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.status!=='ready')wake()});
+
+/* ring: one arc per segment around the bezel */
+function ring(){
+  const cur=S.status==='running'||S.status==='paused'?segIdx():-1, n=segIdx(), gap=1.6, r=47.5;
+  let out='';
+  SEGS.forEach((s,i)=>{
+    const a0=-90+i*360/N+gap/2, a1=-90+(i+1)*360/N-gap/2;
+    const p=a=>[50+r*Math.cos(a*Math.PI/180),50+r*Math.sin(a*Math.PI/180)];
+    const [x0,y0]=p(a0),[x1,y1]=p(a1);
+    const done=i<n, isCur=i===cur;
+    const col=isCur?'var(--accent)':done?zc(s.z):'var(--dim)';
+    out+=`<path d="M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}" fill="none" stroke="${col}" stroke-width="${isCur?3.4:2.4}" stroke-linecap="round" opacity="${done||isCur?1:.9}"/>`;
+  });
+  $('ring').innerHTML=out;
+}
+
+function render(){
+  const st=S.status, live=st==='running'||st==='paused', i=Math.min(segIdx(),N-1), s=SEGS[i];
+  $('vReady').hidden=st!=='ready'; $('vRun').hidden=!live; $('vDone').hidden=st!=='done';
+  const big=$('bigBtn');
+  if(st==='ready'){
+    big.style.setProperty('--zc','var(--accent)');big.innerHTML='START';
+    $('modeBtn').innerHTML=MODE==='lap'?'<b>●</b> 랩 10개 하나씩':'<b>●</b> 런 한 번에 통과';
+    const h=H[0]; $('lastRec').innerHTML=h?`지난 기록<b>${fmt(h.total)}</b>`:'';
+  }else if(live){
+    $('vRun').style.setProperty('--zc',zc(s.z)); big.style.setProperty('--zc',zc(s.z));
+    $('zone').textContent=`Z${s.z} · ${i+1}/${N}`;
+    $('seg').textContent=s.n; $('spec').textContent=s.run?(lapOn()?'랩 10개 하나씩':'런 한 번에 통과'):s.s;
+    $('spec').classList.toggle('sw',!!s.run); $('spec').disabled=!s.run;
+    $('pauseBtn').textContent=st==='paused'?'▶':'❚❚';
+    $('segt').classList.toggle('paused',st==='paused');
+    $('undoBtn').disabled=!S.ev.length; $('undoBtn').style.opacity=S.ev.length?1:.3;
+    const nx=SEGS[i+1];
+    if(s.run&&!lapOn()){
+      $('dots').hidden=true;
+      big.innerHTML=`RUN 완료<small>다음 ${nx.n}</small>`;
+    }else if(s.run){
+      const L=lapsOf(i).length;
+      $('dots').hidden=false; $('dots').innerHTML=Array.from({length:LAPS},(_,k)=>`<i class="${k<L?'on':''}"></i>`).join('');
+      big.innerHTML=`LAP ${L+1}/${LAPS}<small>${L+1===LAPS?'마지막 랩 → '+nx.n:'런 '+(L*80)+'m 완료'}</small>`;
+    }else{
+      $('dots').hidden=true;
+      big.innerHTML=nx?`NEXT<small>${nx.z!==s.z?'ZONE '+nx.z+' · ':''}${nx.n}</small>`:'FINISH';
+    }
+  }else{
+    big.style.setProperty('--zc','#1b1f26'); big.style.color='var(--ink)'; big.innerHTML='새로 시작<small>두 번 누르기</small>';
+    const T=segTimes();let r=0,t=0;T.forEach((v,k)=>SEGS[k].run?r+=v:t+=v);
+    $('fin').textContent=fmt(splits().at(-1)); $('fRun').textContent=fmt(r); $('fSta').textContent=fmt(t);
+  }
+  if(st!=='done') big.style.color='';
+  ring(); tick();
+}
+function tick(){
+  const e=elapsed(), sp=splits(), segE=e-(sp.length?sp.at(-1):0);
+  $('segt').textContent=fmt(segE);
+  $('tot').innerHTML=`Σ <b>${fmt(e)}</b>`;
+}
+/* battery: redraw once per second, right after each second boundary of the total clock; pause while hidden */
+let tmr=null;
+function sched(){clearTimeout(tmr);if(S.status!=='running'||document.hidden)return;tick();tmr=setTimeout(sched,1000-(elapsed()%1000)+15)}
+document.addEventListener('visibilitychange',sched);
+const _render=render;render=function(){_render();sched()};
+
+/* sheets */
+function openSheet(html){$('sheet').innerHTML=html+'<button class="pill close" id="closeSheet">닫기</button>';$('sheet').hidden=false;$('sheet').scrollTop=0;$('closeSheet').onclick=()=>$('sheet').hidden=true}
+$('detailBtn').onclick=()=>{
+  const T=segTimes();let z=0,html='<h4>SPLITS</h4>';
+  SEGS.forEach((s,k)=>{
+    if(s.z!==z){z=s.z;html+=`<div class="sr" style="--zc:${zc(z)}"><span class="zn">ZONE ${z}</span></div>`}
+    html+=`<div class="sr"><span>${s.n}</span><span class="num">${fmt(T[k])}</span></div>`;
+  });
+  openSheet(html);
+};
+$('qrBtn').onclick=()=>{
+  const rec=H.find(h=>h.id===S.id)||H[0]; if(!rec)return;
+  openSheet('<h4>폰으로 보내기</h4><div class="qrbox" id="qr"></div><p class="note">폰 카메라로 찍은 뒤 나온 텍스트를 복사해서, 기록 페이지 맨 아래 「백업 · 복원」에 붙여넣으세요.</p>');
+  const txt=JSON.stringify([rec]);
+  try{new QRCode($('qr'),{text:txt,width:400,height:400,correctLevel:QRCode.CorrectLevel.L})}
+  catch(e){$('qr').outerHTML='<p class="note">QR을 만들지 못했어요. 인터넷 연결을 확인하고 다시 열어주세요.</p>'}
+};
+
+$('spec').onclick=()=>{if(!(S.status==='running'||S.status==='paused')||!SEGS[segIdx()].run)return;S.mode=lapOn()?'pass':'lap';persist();buzz(40);render()};
+$('modeBtn').onclick=()=>{MODE=MODE==='lap'?'pass':'lap';save('hyb-watch-mode',MODE);render()};
+$('bigBtn').onclick=()=>{ if(S.status==='done'){arm($('bigBtn'),'new',newRun);return} main() };
+$('pauseBtn').onclick=pause; $('undoBtn').onclick=undo;
+if(S.status==='running'||S.status==='paused')wake();
+render();
+</script>
+</body>
+</html>
