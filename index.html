@@ -28,10 +28,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);over
 
 .zone{font-family:var(--display);font-weight:700;font-size:5.4vmin;letter-spacing:.12em;color:var(--zc)}
 .seg{font-weight:700;font-size:6.6vmin;line-height:1.15;margin-top:.3vmin;max-width:64vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-wrap:balance}
-.spec{font-size:4.4vmin;color:var(--muted)}
+.spec{font-size:4.4vmin;color:var(--muted);background:none;padding:0;line-height:1.4}
+.spec:disabled{cursor:default}
+.spec.sw{background:#1b1f26;color:var(--ink);border-radius:5vmin;padding:.6vmin 3.5vmin;margin-top:.6vmin;font-weight:700}
+.spec.sw::after{content:" ⇄";color:var(--zc)}
 .segt{font-size:21vmin;font-weight:700;line-height:.9;margin-top:1vmin}
-.segt.paused{animation:blink 1s steps(2) infinite}
-@keyframes blink{50%{opacity:.25}}
+.segt.paused{opacity:.4}
 .mid{display:flex;align-items:center;justify-content:center;gap:2.5vmin;margin-top:.5vmin}
 .tot{font-size:7vmin;font-weight:600;color:var(--muted);white-space:nowrap}
 .tot b{color:var(--ink);font-weight:600}
@@ -55,9 +57,13 @@ button:focus-visible{outline:.8vmin solid var(--ink);outline-offset:.6vmin}
 .doneview{justify-content:flex-start;padding-top:14vmin}
 
 /* ready / done */
-.title{font-family:var(--display);font-weight:800;font-size:11vmin;letter-spacing:.04em;line-height:1}
+.title{font-family:var(--display);font-weight:800;font-size:10vmin;letter-spacing:.04em;line-height:1;white-space:nowrap}
 .sub{font-size:5vmin;color:var(--muted);margin-top:1.5vmin;line-height:1.4}
-.last{margin-top:3vmin;font-size:5vmin;color:var(--muted)}
+.last{margin-top:2vmin;font-size:4.6vmin;color:var(--muted)}
+.mode{margin-top:3vmin;display:flex;flex-direction:column;align-items:center;gap:.8vmin}
+.mode .k{font-size:4vmin;color:var(--muted)}
+.mode .pill{display:flex;align-items:center;gap:2vmin}
+.mode .pill b{color:var(--accent)}
 .last b{font-family:var(--display);font-size:8vmin;color:var(--ink);font-weight:700;margin-left:1.5vmin}
 .fin{font-size:17vmin;font-weight:800;line-height:1;color:var(--accent)}
 .pair{display:flex;gap:5vmin;margin-top:1vmin;font-size:4.2vmin;color:var(--muted)}
@@ -77,7 +83,6 @@ button:focus-visible{outline:.8vmin solid var(--ink);outline-offset:.6vmin}
 .qrbox img,.qrbox canvas{display:block;width:62vmin!important;height:62vmin!important}
 .note{font-size:4.4vmin;color:var(--muted);text-align:center;line-height:1.45}
 .close{display:block;margin:4vmin auto 0}
-@media (prefers-reduced-motion:reduce){.segt.paused{animation:none;opacity:.5}}
 </style>
 </head>
 <body>
@@ -87,14 +92,15 @@ button:focus-visible{outline:.8vmin solid var(--ink);outline-offset:.6vmin}
 
   <section class="view" id="vReady">
     <div class="title">HYBRID SIM</div>
-    <div class="sub">Z1 · Z2 · Z3<br>런 2.4km + 스테이션 8개</div>
+    <div class="sub">런 2.4km + 스테이션 8개</div>
+    <div class="mode"><span class="k">런 기록 방식 (눌러서 변경)</span><button class="pill" id="modeBtn"></button></div>
     <div class="last" id="lastRec"></div>
   </section>
 
   <section class="view runview" id="vRun" hidden>
     <div class="zone" id="zone">ZONE 1</div>
     <div class="seg" id="seg">800m RUN</div>
-    <div class="spec" id="spec">10 laps</div>
+    <button class="spec" id="spec" disabled>10 laps</button>
     <div class="segt num" id="segt">0:00</div>
     <div class="mid">
       <button class="icon" id="undoBtn" aria-label="마지막 기록 취소">↶</button>
@@ -132,6 +138,7 @@ const KEY='hyb-watch-state-v1', HKEY='hyb-watch-history-v1';
 const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const fresh=()=>({status:'ready',startAt:0,paused:0,pauseAt:0,ev:[]});
+let MODE=load('hyb-watch-mode','lap'); // 'lap' = 10 laps one by one, 'pass' = whole run in one tap
 let S=load(KEY,null)||fresh(), H=load(HKEY,[]), lastTap=0;
 
 const now=()=>Date.now();
@@ -153,7 +160,8 @@ const persist=()=>save(KEY,S);
 function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
 
 /* actions */
-function start(){S={...fresh(),status:'running',startAt:now()};persist();wake();buzz(80);render()}
+const lapOn=()=>(S.mode||'lap')==='lap';
+function start(){S={...fresh(),status:'running',startAt:now(),mode:MODE};persist();wake();buzz(80);render()}
 function resume(){S.paused+=now()-S.pauseAt;S.pauseAt=0;S.status='running'}
 function split(){
   if(S.status==='paused')resume();
@@ -172,7 +180,7 @@ function main(){
   const b=$('bigBtn'); b.classList.add('cool'); setTimeout(()=>b.classList.remove('cool'),GUARD);
   if(S.status==='ready')return start();
   if(S.status==='done')return newRun();
-  SEGS[segIdx()].run?lap():split();
+  SEGS[segIdx()].run&&lapOn()?lap():split();
 }
 function pause(){
   if(S.status==='running'){S.status='paused';S.pauseAt=now()}else if(S.status==='paused')resume();
@@ -218,16 +226,21 @@ function render(){
   const big=$('bigBtn');
   if(st==='ready'){
     big.style.setProperty('--zc','var(--accent)');big.innerHTML='START';
+    $('modeBtn').innerHTML=MODE==='lap'?'<b>●</b> 랩 10개 하나씩':'<b>●</b> 런 한 번에 통과';
     const h=H[0]; $('lastRec').innerHTML=h?`지난 기록<b>${fmt(h.total)}</b>`:'';
   }else if(live){
     $('vRun').style.setProperty('--zc',zc(s.z)); big.style.setProperty('--zc',zc(s.z));
     $('zone').textContent=`Z${s.z} · ${i+1}/${N}`;
-    $('seg').textContent=s.n; $('spec').textContent=s.s;
+    $('seg').textContent=s.n; $('spec').textContent=s.run?(lapOn()?'랩 10개 하나씩':'런 한 번에 통과'):s.s;
+    $('spec').classList.toggle('sw',!!s.run); $('spec').disabled=!s.run;
     $('pauseBtn').textContent=st==='paused'?'▶':'❚❚';
     $('segt').classList.toggle('paused',st==='paused');
     $('undoBtn').disabled=!S.ev.length; $('undoBtn').style.opacity=S.ev.length?1:.3;
     const nx=SEGS[i+1];
-    if(s.run){
+    if(s.run&&!lapOn()){
+      $('dots').hidden=true;
+      big.innerHTML=`RUN 완료<small>다음 ${nx.n}</small>`;
+    }else if(s.run){
       const L=lapsOf(i).length;
       $('dots').hidden=false; $('dots').innerHTML=Array.from({length:LAPS},(_,k)=>`<i class="${k<L?'on':''}"></i>`).join('');
       big.innerHTML=`LAP ${L+1}/${LAPS}<small>${L+1===LAPS?'마지막 랩 → '+nx.n:'런 '+(L*80)+'m 완료'}</small>`;
@@ -245,10 +258,14 @@ function render(){
 }
 function tick(){
   const e=elapsed(), sp=splits(), segE=e-(sp.length?sp.at(-1):0);
-  $('segt').textContent=fmt(segE, segE<600000);
+  $('segt').textContent=fmt(segE);
   $('tot').innerHTML=`Σ <b>${fmt(e)}</b>`;
 }
-setInterval(()=>{if(S.status==='running')tick()},100);
+/* battery: redraw once per second, right after each second boundary of the total clock; pause while hidden */
+let tmr=null;
+function sched(){clearTimeout(tmr);if(S.status!=='running'||document.hidden)return;tick();tmr=setTimeout(sched,1000-(elapsed()%1000)+15)}
+document.addEventListener('visibilitychange',sched);
+const _render=render;render=function(){_render();sched()};
 
 /* sheets */
 function openSheet(html){$('sheet').innerHTML=html+'<button class="pill close" id="closeSheet">닫기</button>';$('sheet').hidden=false;$('sheet').scrollTop=0;$('closeSheet').onclick=()=>$('sheet').hidden=true}
@@ -268,6 +285,8 @@ $('qrBtn').onclick=()=>{
   catch(e){$('qr').outerHTML='<p class="note">QR을 만들지 못했어요. 인터넷 연결을 확인하고 다시 열어주세요.</p>'}
 };
 
+$('spec').onclick=()=>{if(!(S.status==='running'||S.status==='paused')||!SEGS[segIdx()].run)return;S.mode=lapOn()?'pass':'lap';persist();buzz(40);render()};
+$('modeBtn').onclick=()=>{MODE=MODE==='lap'?'pass':'lap';save('hyb-watch-mode',MODE);render()};
 $('bigBtn').onclick=()=>{ if(S.status==='done'){arm($('bigBtn'),'new',newRun);return} main() };
 $('pauseBtn').onclick=pause; $('undoBtn').onclick=undo;
 if(S.status==='running'||S.status==='paused')wake();
